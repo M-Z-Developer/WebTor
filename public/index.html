@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebTor Clone - تحميل التورنت المباشر</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background-color: #f4f7f6; color: #333; }
+        .container { background: #fff; padding: 30px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        input[type="text"] { width: 100%; padding: 12px; margin-bottom: 20px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; padding: 12px 20px; border-radius: 5px; cursor: pointer; font-size: 16px; transition: 0.3s; }
+        button:hover { background: #0056b3; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        #file-list { margin-top: 20px; }
+        .file-item { display: flex; justify-content: space-between; align-items: center; padding: 10px; border-bottom: 1px solid #eee; }
+        .file-item label { cursor: pointer; word-break: break-all; margin-right: 10px; flex-grow: 1; }
+        #download-btn { margin-top: 20px; display: none; width: 100%; background: #28a745; }
+        #download-btn:hover { background: #218838; }
+        .loader { display: none; color: #007bff; font-weight: bold; margin-bottom: 15px;}
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>⚡ تحميل ملفات التورنت بروابط مباشرة</h2>
+    <p>أدخل الرابط المغناطيسي (Magnet Link) أدناه:</p>
+    <input type="text" id="magnet-link" placeholder="magnet:?xt=urn:btih:...">
+    <button id="fetch-btn" onclick="fetchMetadata()">جلب الملفات</button>
+    <div id="loader" class="loader">جاري الاتصال بشبكة التورنت وجلب البيانات... يرجى الانتظار</div>
+
+    <div id="file-list"></div>
+    <button id="download-btn" onclick="downloadSelected()">تحميل الملفات المحددة</button>
+</div>
+
+<script>
+    let currentInfoHash = '';
+
+    // دالة لتحويل البايتات إلى حجم مقروء
+    function formatBytes(bytes, decimals = 2) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024, dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    async function fetchMetadata() {
+        const magnet = document.getElementById('magnet-link').value;
+        if (!magnet) return alert('يرجى إدخال الرابط المغناطيسي');
+
+        const btn = document.getElementById('fetch-btn');
+        const loader = document.getElementById('loader');
+        const fileList = document.getElementById('file-list');
+        const downloadBtn = document.getElementById('download-btn');
+
+        btn.disabled = true;
+        loader.style.display = 'block';
+        fileList.innerHTML = '';
+        downloadBtn.style.display = 'none';
+
+        try {
+            const res = await fetch('/api/metadata', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ magnet })
+            });
+
+            const data = await res.json();
+            
+            if (!res.ok) throw new Error(data.error || 'حدث خطأ غير معروف');
+
+            currentInfoHash = data.infoHash;
+            
+            data.files.forEach(file => {
+                const div = document.createElement('div');
+                div.className = 'file-item';
+                div.innerHTML = `
+                    <input type="checkbox" id="file-${file.index}" value="${file.index}" checked>
+                    <label for="file-${file.index}">${file.name}</label>
+                    <span>${formatBytes(file.size)}</span>
+                `;
+                fileList.appendChild(div);
+            });
+
+            downloadBtn.style.display = 'block';
+        } catch (err) {
+            alert(err.message);
+        } finally {
+            btn.disabled = false;
+            loader.style.display = 'none';
+        }
+    }
+
+    function downloadSelected() {
+        const checkboxes = document.querySelectorAll('input[type="checkbox"]:checked');
+        if (checkboxes.length === 0) return alert('يرجى تحديد ملف واحد على الأقل');
+
+        const selectedIndices = Array.from(checkboxes).map(cb => cb.value).join(',');
+        
+        // فتح رابط التحميل المباشر والذي سيجبر المتصفح على التحميل المستمر
+        const downloadUrl = `/download?infoHash=${currentInfoHash}&files=${selectedIndices}`;
+        window.location.href = downloadUrl;
+    }
+</script>
+</body>
+</html>
